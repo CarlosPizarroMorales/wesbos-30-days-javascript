@@ -1,3 +1,8 @@
+## Notas al día 1 - Javascript Drum Kit
+![imagen del proyecto][17]
+
+<hr>
+
 ## Referencias! *---'cause we nerds, love them :)--*
 
 - [WHATWG sobre el elemento `<kbd>`][0]
@@ -8,13 +13,15 @@
 - [MDN CSS sobre el shorthand background][5]
 - [Tutorial en MDN sobre el uso de CSS transition][10]
 - [Website para encontrar el keycode de cualquier tecla][11]
+- [MDN sobre CSS box-shadow][14]
+- [MDN sobre evento transitionEnd][16]
+- [MDN sobre objeto *this*][18]
 
 
 <hr>
 
-## Notas al día 1 - Javascript Drum Kit
 
-El proyecto trae incorporado todo el HTML y CSS, y por su parte, los scripts de Javascript son muy cortitos, por lo que el ejercicio para mí será realizar una *lectura activa* y repasar con mis notas sobre todo lo que conozco y desconozco de cada proyecto, sacándole el máximo rendimiento posible en cuanto a conocimientos.
+El proyecto consiste en una interfaz web mínima en la que el usuario puede presionar alguna de las teclas sugeridas en en la pantalla para provocar un sonido de percusión. El proyecto trae incorporado todo el HTML y CSS, y por su parte, el código de Javascript es muy cortito, por lo que el ejercicio consiste sobre todo en realizar una *lectura activa* y repasar con estas notas sobre todo lo que conozco y desconozco de su código, sacándole el máximo rendimiento posible en cuanto a conocimientos.
 
 ## HTML
 
@@ -155,6 +162,8 @@ kbd {
 ```
 
 - Finalmente, esta regla declara un ligero escalado, además de cambiar el color del borde y la sombra del elemento al que se aplica.
+- **Algo interesante** es que no es necesario declarar valores distintos de 0 en los primeros argumentos de `box-shadow` mientras tenga blur. 
+- **NOTA** esto pasa porque los dos primeros valores corresponden al desplazamiento en el eje X e Y correspondientemente. Si se indican en 0 la sombra se aplicará pareja en los cuatro lados. [Leer sobre esto][14]
 - Esta clase no está aplicada a ningún elemento directamente en el código, y se aplica dinámicamente como respuesta a un `eventListener` que se agregará en el script a la ventana.
 - Tengo la impresión de que como estas son las propiedades que modifican al elemento `.key` que a su vez tiene la propiedad `transition: all .7s ease`, finalente esta última propiedad define de qué manera y en cuánto tiempo sucede este cambio de estado.
 - **Sigo sin estar seguro** si `all` aplica solo a las propiedades explícitamente declaradas en esta última regla o aplica a otros estilos, browser-dependientes por ejemplo. 
@@ -218,7 +227,85 @@ window.addEventListener('keydown', function(e){
   audio.play();
 })
 ```
-- hasta acá, la parte del proyecto donde nuestras teclas invocan un sonido funciona bien, ahora se necesita que la objeto en pantalla que representa la tecla tenga una pequeña animación. 
+- hasta acá, la parte del proyecto donde nuestras teclas invocan un sonido funciona bien, ahora se necesita que la objeto en pantalla que representa la tecla tenga una pequeña animación. Nos hacemos una idea de la animación que se quiere lograr con este snippet de CSS:
+
+```css
+.key {
+  border: .4rem solid black;
+  box-shadow: none; /* implícito */
+  transition: all .07s ease;
+}
+
+.playing {
+  transform: scale(1.1);
+  border-color: #ffc600;
+  box-shadow: 0 0 1rem #ffc600;
+}
+```
+
+
+- se entiende por las dos reglas que lo que se busca es que el grupo `.key` creza un 10% mientras aparece un border de amarillo muy contrastante con el background y los elementos `.key` 
+- Todo lo anterior pasa en una fracción de segundo como indica el segundo valor en la propiedad `transition` de la primera regla.
+
+![screenshot del efecto][15]
+
+- Para lograrlo, se han realizado dos acciones: primero, justo debajo del primer `querySelector` se ha creado otro, que busca un grupo `.key` bajo la misma condición que con el elemento `<audio>`: que su atributo `data-key` sea el mismo del `e.keyCode` del evento disparado al presionar una tecla y se le asigna a una constante `key`. Luego, con ese elemento seleccionado, se utiliza esta propiedad de la DOM API: `key.classList.add('playing)` que dice algo así: una vez que encuentres y selecciones ese elemento asígnalo a la constante `key` y entonces, a su listado de clases `classList` agrégale otra nueva `add` de nombre `playing`: 
+
+```javascript
+window.addEventListener('keydown', function(e){
+  const audio = document.querySelector(`audio[data-key="${e.keyCode}"]`);
+  const key = document.querySelector(`.key[data-key="${e.keyCode}"]`);
+  if (!audio) return;
+  audio.currentTime = 0;
+  audio.play();
+  key.classList.add('playing');
+})
+```
+
+- OK, hasta acá genial, pero algo pasa: no se quita el efecto. Este aparece en el tiempo especificado, pero luego no se va. Y claro, el código indica claramente que cuando se presione una tecla se agregue esa clase que provoca el adorno, pero nunca se indica que se le quite.
+- Para corregirlo se utiliza un *eventListener* llamado `transitionEnd`. Este evento se dispara cuando en el elemento apuntado, ha concluido cualquier transición que se le haya agregado. En este caso la transicíón es la que indica la línea de CSS `transition: all .07s ease`
+- Para lograrlo, se debe crear un listener en cada grupo `.key` usando un *selectorAll* y un *forEach*: 
+
+```javascript
+const keys = document.querySelectorAll('.key');
+keys.forEach(key => key.addEventListener('transitionEnd', function(e){
+  if (e.propertyName !== 'transform') return; 
+  this.classList.remove('playing');
+}))
+```
+
+- Todo funcionando bien aca. Este último párrafo puede ser un poco *tricky* así que vamos por línea: 
+- a la constante `keys` se le asigna un arreglo con todos los elementos que tengan la clase `.key`
+- ese arreglo se recorre mediante el método `forEach` que toma 1 elemento en cada iteración `key` para agregarle el eventListener `key.addEventListener` que estará atento al momento en que termine cualquier transición que ocurra en este `('transitionEnd', function(e){ ...})` [Leer acá sobre transitionEnd][16]
+- solo queremos escuchar cuando termine la transición 'transform' porque es la más importante, por lo tanto si la propiedad que ha concluido no es `transform` termina la ejecución de la función `if (e.propertyName !== 'transform') return; 
+- Si es transform, continuar y entonces, quitar la clase que crea el adorno: `this.classList.remove('playing'); 
+- El operador *`this`* puede ser un poco confuso  pero sin complicarlo mucho, es similar al argumento `e` en que "trae" valores consigo por defecto, que en el caso de `this` es el objeto que invoca a la función. Y como el objeto que ha invocado la función de `removeTransition` es un grupo `key`, este al ser utilizado es como indicar `key` que en el contexto del bloque de la función ya está fuera de alcance. (creo) **REVISAR** [Leer sobre this en MDN][18]
+- **And... that's it!** 
+- Solo queda observar que la última línea que llama al elemento del contexto *this* también se puede realizar con la propiedad interna del evento `target`, que registra el elemento sobre el que se ha disparado el evento en cuestión: 
+  - `e.target.classList.remove('playing');
+
+- Finalmente, se hace una pequeña refactorización del código para que quede más ordenado y modular y se lleva toda la lógica de los eventListeners a funciones separadas y queda así: 
+
+```javascript
+function removeTransition(e) {
+  if (e.propertyName !== 'transform') return;
+  e.target.classList.remove('playing');
+}
+
+function playSound(e) {
+  const audio = document.querySelector(`audio[data-key="${e.keyCode}"]`);
+  const key = document.querySelector(`div[data-key="${e.keyCode}"]`);
+  if (!audio) return;
+
+  key.classList.add('playing');
+  audio.currentTime = 0;
+  audio.play();
+}
+
+const keys = Array.from(document.querySelectorAll('.key'));
+keys.forEach(key => key.addEventListener('transitionend', removeTransition));
+window.addEventListener('keydown', playSound);
+```
 
 
 <hr>
@@ -237,3 +324,8 @@ window.addEventListener('keydown', function(e){
 [11]:https://keycode.info
 [12]:./img/inspector-event-keyCode.png
 [13]:./img/inspector-error-audio-null.png
+[14]:https://developer.mozilla.org/en-US/docs/Web/CSS/box-shadow
+[15]:./img/screenshot-efecto-transition.png
+[16]:https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/transitionend_event
+[17]:./img/JS-Drum-Kit.png
+[18]:https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/this
